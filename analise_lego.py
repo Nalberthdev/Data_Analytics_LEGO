@@ -46,5 +46,3 @@ tabela_frequencia["fi_acumulada"] = tabela_frequencia["fi"].cumsum()
 
 print(tabela_frequencia)
 print("Soma de fi:", tabela_frequencia["fi"].sum())
-
-
