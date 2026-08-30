@@ -34,7 +34,7 @@ frequencia_relativa = conjuntos[coluna].value_counts(dropna=False, normalize=Tru
 # frequencia percentual (%): fr multiplicada por 100
 frequencia_percentual = (frequencia_relativa * 100).round(2)
 
-# junta as 3 colunas numa Ãºnica tabela
+# junta as 3 colunas numa unica tabela
 tabela_frequencia = pd.DataFrame({
     "fi": frequencia_absoluta,
     "fr": frequencia_relativa.round(4),
