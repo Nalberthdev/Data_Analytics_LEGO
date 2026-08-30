@@ -1,6 +1,6 @@
 # Dashboard de Estatística — Conjuntos LEGO
 
-Front-end interativo (Streamlit + Apache ECharts) do trabalho de Estatística.
+Front-end interativo (Streamlit + Altair) do trabalho de Estatística.
 Este diretório é **autossuficiente**: tem o código, as dependências e o dataset.
 
 ```

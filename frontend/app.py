@@ -7,7 +7,7 @@ Dashboard interativo (Streamlit) — código SEPARADO e autossuficiente:
 não depende do 'analise_lego.py'. Apresenta:
   - classificação das variáveis
   - tabelas de frequência (fi, fr, %)
-  - gráficos de barras, setores/pizza e linhas (Apache ECharts)
+  - gráficos de barras, setores/pizza e linhas (Altair/Vega-Lite)
   - galeria com as imagens reais dos conjuntos (pelas URLs do dataset)
 
 Como executar localmente (de qualquer pasta):
@@ -18,9 +18,9 @@ Deploy: ver o README.md (Streamlit Community Cloud).
 
 import os
 
+import altair as alt
 import pandas as pd
 import streamlit as st
-from streamlit_echarts import st_echarts
 
 # ----------------------------------------------------------------------
 # CAMINHO DO DATASET
@@ -171,7 +171,7 @@ with aba_var:
         ],
         columns=["Coluna", "Tipo", "Subtipo", "Justificativa"],
     )
-    st.dataframe(classificacao, width="stretch", hide_index=True)
+    st.dataframe(classificacao, use_container_width=True, hide_index=True)
 
     st.info(
         "**Régua rápida** — Qualitativa: é categoria/nome. Quantitativa: é número que dá para "
@@ -206,7 +206,7 @@ with aba_tab:
     tabela = montar_tabela_frequencia(serie, incluir_vazios=(coluna == "themeGroup"),
                                       ordenar_por_indice=por_indice)
 
-    st.dataframe(tabela, width="stretch")
+    st.dataframe(tabela, use_container_width=True)
     st.caption(f"n = {int(tabela['fi'].sum())}  ·  Σ fi = n  ·  Σ % = 100")
 
     st.download_button(
@@ -228,9 +228,7 @@ with aba_tab:
 with aba_graf:
     st.subheader("Gráficos")
 
-    st.caption("Gráficos interativos (biblioteca Apache ECharts). Passe o mouse para ver os valores.")
-
-    PALETA = [COR_PRINCIPAL, COR_SECUNDARIA, "#0055BF", "#237841", "#8B4513", "#A0A0A0", "#FF8C00"]
+    st.caption("Gráficos interativos (Altair/Vega-Lite, nativo do Streamlit). Passe o mouse para ver os valores.")
 
     # --- BARRAS: themeGroup ---
     st.markdown("#### Gráfico de barras — conjuntos por grupo de tema")
@@ -238,23 +236,21 @@ with aba_graf:
         "Barras servem para variável **qualitativa com várias categorias**: fácil comparar "
         "tamanhos e ordenar da maior para a menor."
     )
-    barras = dados["themeGroup"].value_counts().sort_values(ascending=True)
-    st_echarts(
-        {
-            "title": {"text": "Conjuntos LEGO por grupo de tema", "left": "center"},
-            "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
-            "grid": {"left": 130, "right": 60, "top": 50, "bottom": 40},
-            "xAxis": {"type": "value", "name": "fi (nº de conjuntos)"},
-            "yAxis": {"type": "category", "data": barras.index.astype(str).tolist()},
-            "series": [{
-                "type": "bar",
-                "data": barras.values.tolist(),
-                "itemStyle": {"color": COR_PRINCIPAL},
-                "label": {"show": True, "position": "right"},
-            }],
-        },
-        height="480px",
+    barras = (
+        dados["themeGroup"].value_counts()
+        .rename_axis("Grupo de tema").reset_index(name="Conjuntos")
     )
+    grafico_barras = (
+        alt.Chart(barras)
+        .mark_bar(color=COR_PRINCIPAL)
+        .encode(
+            x=alt.X("Conjuntos:Q", title="fi (nº de conjuntos)"),
+            y=alt.Y("Grupo de tema:N", sort="-x", title=None),
+            tooltip=["Grupo de tema", "Conjuntos"],
+        )
+        .properties(height=420, title="Conjuntos LEGO por grupo de tema")
+    )
+    st.altair_chart(grafico_barras, use_container_width=True)
 
     # --- PIZZA / SETORES: category ---
     st.markdown("#### Gráfico de setores/pizza — distribuição por categoria")
@@ -262,23 +258,22 @@ with aba_graf:
         "Pizza serve para **poucas categorias** quando queremos mostrar a **parte de um todo**. "
         "Cada fatia é uma categoria; o tamanho é o número de conjuntos (fi)."
     )
-    pizza = dados["category"].value_counts()
-    st_echarts(
-        {
-            "title": {"text": "Distribuição dos conjuntos por categoria", "left": "center"},
-            "tooltip": {"trigger": "item", "formatter": "{b}: {c} conjuntos"},
-            "legend": {"orient": "vertical", "left": "left", "top": "middle"},
-            "color": PALETA,
-            "series": [{
-                "type": "pie",
-                "radius": ["35%", "65%"],
-                "center": ["58%", "55%"],
-                "data": [{"name": str(n), "value": int(v)} for n, v in pizza.items()],
-                "label": {"formatter": "{b}\n{c}"},
-            }],
-        },
-        height="460px",
+    pizza = (
+        dados["category"].value_counts()
+        .rename_axis("Categoria").reset_index(name="Conjuntos")
     )
+    grafico_pizza = (
+        alt.Chart(pizza)
+        .mark_arc(innerRadius=60, stroke="white")
+        .encode(
+            theta=alt.Theta("Conjuntos:Q", stack=True),
+            color=alt.Color("Categoria:N", scale=alt.Scale(scheme="category10"),
+                            legend=alt.Legend(title="Categoria")),
+            tooltip=["Categoria", "Conjuntos"],
+        )
+        .properties(height=380, title="Distribuição dos conjuntos por categoria")
+    )
+    st.altair_chart(grafico_pizza, use_container_width=True)
 
     # --- LINHAS: lançamentos por ano ---
     st.markdown("#### Gráfico de linhas — evolução dos lançamentos ao longo do tempo")
@@ -286,48 +281,40 @@ with aba_graf:
         "Linhas servem para mostrar a **evolução de uma quantidade ao longo do tempo**: "
         "o eixo X é o ano e a linha revela tendência de crescimento, quedas e picos."
     )
-    linha = dados["year"].value_counts().sort_index()
-    st_echarts(
-        {
-            "title": {"text": "Lançamentos de conjuntos LEGO por ano", "left": "center"},
-            "tooltip": {"trigger": "axis"},
-            "grid": {"left": 60, "right": 30, "top": 50, "bottom": 50},
-            "xAxis": {"type": "category", "data": linha.index.astype(int).astype(str).tolist(),
-                      "name": "Ano"},
-            "yAxis": {"type": "value", "name": "fi (nº de conjuntos)"},
-            "series": [{
-                "type": "line",
-                "data": linha.values.tolist(),
-                "smooth": True,
-                "areaStyle": {"opacity": 0.15},
-                "itemStyle": {"color": COR_PRINCIPAL},
-                "lineStyle": {"color": COR_PRINCIPAL, "width": 2},
-            }],
-        },
-        height="420px",
+    linha = (
+        dados["year"].value_counts().sort_index()
+        .rename_axis("Ano").reset_index(name="Conjuntos")
     )
+    grafico_linha = (
+        alt.Chart(linha)
+        .mark_line(color=COR_PRINCIPAL, point=alt.OverlayMarkDef(color=COR_PRINCIPAL, size=25))
+        .encode(
+            x=alt.X("Ano:O", title="Ano de lançamento"),
+            y=alt.Y("Conjuntos:Q", title="fi (nº de conjuntos)"),
+            tooltip=["Ano", "Conjuntos"],
+        )
+        .properties(height=360, title="Lançamentos de conjuntos LEGO por ano")
+    )
+    st.altair_chart(grafico_linha, use_container_width=True)
 
     # --- BARRAS: idade mínima ---
     st.markdown("#### Gráfico de barras — idade mínima recomendada")
     st.caption("Variável quantitativa discreta tratada como faixa ordinal (ordem natural das idades).")
-    idade = dados["agerange_min"].dropna().astype(int).value_counts().sort_index()
-    st_echarts(
-        {
-            "title": {"text": "Conjuntos por idade mínima recomendada", "left": "center"},
-            "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
-            "grid": {"left": 60, "right": 30, "top": 50, "bottom": 50},
-            "xAxis": {"type": "category", "data": idade.index.astype(str).tolist(),
-                      "name": "Idade mínima (anos)"},
-            "yAxis": {"type": "value", "name": "fi (nº de conjuntos)"},
-            "series": [{
-                "type": "bar",
-                "data": idade.values.tolist(),
-                "itemStyle": {"color": COR_SECUNDARIA},
-                "label": {"show": True, "position": "top"},
-            }],
-        },
-        height="420px",
+    idade = (
+        dados["agerange_min"].dropna().astype(int).value_counts().sort_index()
+        .rename_axis("Idade mínima").reset_index(name="Conjuntos")
     )
+    grafico_idade = (
+        alt.Chart(idade)
+        .mark_bar(color=COR_SECUNDARIA)
+        .encode(
+            x=alt.X("Idade mínima:O", title="Idade mínima recomendada (anos)"),
+            y=alt.Y("Conjuntos:Q", title="fi (nº de conjuntos)"),
+            tooltip=["Idade mínima", "Conjuntos"],
+        )
+        .properties(height=360, title="Conjuntos por idade mínima recomendada")
+    )
+    st.altair_chart(grafico_idade, use_container_width=True)
 
 # ---------- ABA 4: GALERIA DE IMAGENS ----------
 with aba_img:
@@ -349,7 +336,7 @@ with aba_img:
     colunas_grade = st.columns(4)
     for i, (_, conjunto) in enumerate(selecao.iterrows()):
         with colunas_grade[i % 4]:
-            st.image(conjunto["imageURL"], width="stretch")
+            st.image(conjunto["imageURL"], use_container_width=True)
             st.caption(
                 f"**{conjunto['name']}**  \n"
                 f"{conjunto['theme']} · {int(conjunto['year'])}  \n"
